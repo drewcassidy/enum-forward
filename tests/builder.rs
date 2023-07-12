@@ -1,7 +1,10 @@
+use enum_forward::forwarder;
+
 struct A {}
 struct B {}
 
-enum Foo { A(A), B(B), }
+#[forwarder(GetName)]
+enum Foo { A, B, }
 
 trait GetName {
     fn name(&self) -> &'static str;
@@ -20,7 +23,7 @@ trait FooForwarder<R> {
 }
 
 impl Foo {
-    fn forward<D: FooForwarder<R>, R>(&self, fwd: D) -> R {
+    fn forward<'a, D: FooForwarder<R>, R>(&self, fwd: D) -> R {
         return match self {
             Foo::A(a) => { fwd.build::<A>()(a) }
             Foo::B(b) => { fwd.build::<B>()(b) }
@@ -34,7 +37,7 @@ struct GetNameFwd {}
 
 impl FooForwarder<&'static str> for GetNameFwd {
     fn build<T: GetName>(&self) -> fn(&T) -> &'static str {
-        |t| t.name()
+        |t| (*t).name()
     }
 }
 
