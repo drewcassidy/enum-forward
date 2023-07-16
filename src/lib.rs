@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::derive::{derive_enum_from2, derive_enum_tryinto2};
+use crate::convert::{derive_enum_from2, derive_enum_tryinto2};
 
-mod derive;
+mod convert;
 mod common;
 mod error;
 mod forward;
