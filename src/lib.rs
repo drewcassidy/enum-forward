@@ -1,44 +1,31 @@
-use proc_macro2::TokenStream;
-use quote::{quote_spanned, ToTokens};
-use syn::{Fields, FieldsUnnamed, ItemEnum, parse2, TraitBound};
-use syn::parse::Parser;
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
-use syn::token::Plus;
+use crate::derive::{derive_enum_from2, derive_enum_tryinto2};
 
-#[proc_macro_attribute]
-pub fn forwarder(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    match forwarder2(attr.into(), item.into()) {
+mod derive;
+mod common;
+mod error;
+mod forward;
+
+#[proc_macro_derive(From)]
+pub fn derive_enum_from(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match derive_enum_from2(item.into()) {
         Ok(output) => output.into(),
-        Err(err) => err.to_compile_error().into(),
+        Err(err) => err.to_compile_error(),
     }
 }
 
-fn forwarder2(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
-    type TraitBounds = Punctuated<TraitBound, Plus>;
-
-    let traits = TraitBounds::parse_terminated.parse2(attr)?;
-    let mut item = parse2::<ItemEnum>(item)?;
-
-    for variant in &mut item.variants {
-        match variant.fields.clone() {
-            Fields::Named(ns) => {
-                if ns.named.len() > 1 {
-                    return Err(syn::Error::new(variant.span(), "Only one field allowed on each variant"));
-                }
-            }
-            Fields::Unnamed(us) => {
-                if us.unnamed.len() > 1 {
-                    return Err(syn::Error::new(variant.span(), "Only one field allowed on each variant"));
-                }
-            }
-            Fields::Unit => {
-                let var_ident = variant.ident.clone();
-                variant.fields = Fields::Unnamed(
-                    parse2::<FieldsUnnamed>(quote_spanned! {var_ident.span() => (#var_ident)})?)
-            }
-        }
+#[proc_macro_derive(TryInto)]
+pub fn derive_enum_tryinto(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match derive_enum_tryinto2(item.into()) {
+        Ok(output) => output.into(),
+        Err(err) => err.to_compile_error(),
     }
+}
 
-    Ok(item.to_token_stream())
+
+#[proc_macro_attribute]
+pub fn forwarding(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match forward::forwarding2(attr.into(), item.into()) {
+        Ok(output) => output.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
 }

@@ -1,9 +1,10 @@
-use enum_forward::forwarder;
+use enum_forward::{forwarding, From, TryInto};
 
 struct A {}
 struct B {}
 
-#[forwarder(GetName)]
+#[forwarding(GetName)]
+#[derive(TryInto, From)]
 enum Foo { A, B, }
 
 trait GetName {
