@@ -8,6 +8,7 @@ use proc_macro2::{Span};
 pub enum Error {
     MultipleMembers(Span),
     UnitVariant(Span),
+    DuplicateType(Span),
     Other(Span, String),
     Syn(syn::Error),
 }
@@ -22,6 +23,9 @@ impl Into<syn::Error> for Error {
             Error::UnitVariant(span) => {
                 syn::Error::new(span,
                                 "Enum variant is a unit variant, and cannot be converted to or from an inner type")
+            }
+            Error::DuplicateType(span) => {
+                syn::Error::new(span, "Enum has multiple variants with the same type.")
             }
             Error::Other(span, msg) => {
                 syn::Error::new(span, msg)

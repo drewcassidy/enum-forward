@@ -26,8 +26,8 @@ trait FooForwarder<R> {
 impl Foo {
     fn forward<'a, D: FooForwarder<R>, R>(&self, fwd: D) -> R {
         return match self {
-            Foo::A(a) => { fwd.build::<A>()(a) }
-            Foo::B(b) => { fwd.build::<B>()(b) }
+            Foo::A(a) => { fwd.build()(a) }
+            Foo::B(b) => { fwd.build()(b) }
         };
     }
 }
