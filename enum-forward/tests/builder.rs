@@ -32,19 +32,32 @@ impl Foo {
     }
 }
 
+trait Visit<I, R> {
+    fn visit(&self, input : I) -> R;
+}
+
+impl<I, R> Visit<I,R> for Foo where A : Visit<I,R>, B : Visit<I,R>{
+    fn visit(&self, input: I) -> R {
+        return match self {
+            Foo::A(val) => {Visit::visit(val, input)}
+            Foo::B(val) => {Visit::visit(val, input)}
+        }
+    }
+}
+
 // everything from here on has no knowledge of the variants of Foo
 
 struct GetNameFwd {}
 
-impl FooForwarder<&'static str> for GetNameFwd {
-    fn build<T: GetName>(&self) -> fn(&T) -> &'static str {
-        |t| (*t).name()
+impl<T> Visit<GetNameFwd, &'static str> for T where T : GetName {
+    fn visit(&self, input: GetNameFwd) -> &'static str {
+        self.name()
     }
 }
 
 impl Foo {
     fn get_name(&self) -> &'static str {
-        self.forward(GetNameFwd{})
+        <Self as Visit<GetNameFwd, &'static str>>::visit(self, GetNameFwd{})
     }
 }
 
