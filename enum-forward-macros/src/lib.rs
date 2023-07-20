@@ -26,9 +26,9 @@ pub fn derive_enum_tryinto(item: proc_macro::TokenStream) -> proc_macro::TokenSt
 }
 
 
-#[proc_macro_attribute]
-pub fn forwarding(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    match forward::forwarding2(attr.into(), item.into()) {
+#[proc_macro_derive(Forward)]
+pub fn forwarding(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match forward::forwarding2(item.into()) {
         Ok(output) => output.into(),
         Err(err) => err.to_compile_error().into(),
     }

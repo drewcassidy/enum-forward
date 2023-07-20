@@ -2,9 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::collections::HashSet;
 use proc_macro2::{Group, Ident, TokenStream, TokenTree};
 use quote::quote;
-use syn::{Fields, ItemEnum, Type, Variant};
+use syn::{Fields, ItemEnum, Lifetime, Type, TypeArray, TypeGroup, TypeParen, TypePtr, TypeReference, TypeSlice, TypeTuple, Variant};
 use syn::spanned::Spanned;
 use crate::error::{Error, Result};
 
@@ -64,4 +65,57 @@ pub(crate) fn replace_ident(ts: TokenStream, from: Ident, to: Ident) -> TokenStr
             }
         }
     ).collect()
+}
+
+fn lifetimeify(ty: Type, blanket: &Lifetime, lifetimes: &mut HashSet<Lifetime>) -> Type {
+    match ty {
+        Type::Array(inner) => {
+            Type::Array(TypeArray {
+                elem: Box::new(lifetimeify(*inner.elem, blanket, lifetimes)),
+                ..inner
+            })
+        }
+        Type::Group(inner) => {
+            Type::Group(TypeGroup {
+                elem: Box::new(lifetimeify(*inner.elem, blanket, lifetimes)),
+                ..inner
+            })
+        }
+        Type::Paren(inner) => {
+            Type::Paren(TypeParen {
+                elem: Box::new(lifetimeify(*inner.elem, blanket, lifetimes)),
+                ..inner
+            })
+        }
+        Type::Ptr(inner) => {
+            Type::Ptr(TypePtr {
+                elem: Box::new(lifetimeify(*inner.elem, blanket, lifetimes)),
+                ..inner
+            })
+        }
+        Type::Reference(inner) => {
+            let lifetime = inner.lifetime.unwrap_or(blanket.clone());
+
+            lifetimes.insert(lifetime.clone());
+
+            Type::Reference(TypeReference {
+                lifetime: Some(lifetime),
+                elem: Box::new(lifetimeify(*inner.elem.clone(), blanket, lifetimes)),
+                ..inner
+            })
+        }
+        Type::Slice(inner) => {
+            Type::Slice(TypeSlice {
+                elem: Box::new(lifetimeify(*inner.elem, blanket, lifetimes)),
+                ..inner
+            })
+        }
+        Type::Tuple(inner) => {
+            Type::Tuple(TypeTuple {
+                elems: inner.elems.iter().map(|e| lifetimeify(e.clone(), blanket, lifetimes)).collect(),
+                ..inner
+            })
+        }
+        _ => { ty }
+    }
 }

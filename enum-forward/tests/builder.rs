@@ -1,11 +1,10 @@
-use enum_forward::{forwarding, From, TryInto};
+use enum_forward::{Forward, From, TryInto};
 
 struct A {}
 struct B {}
 
-#[forwarding(GetName)]
-#[derive(TryInto, From)]
-enum Foo { A, B, }
+#[derive(Forward)]
+enum Foo { A(A), B(B), }
 
 trait GetName {
     fn name(&self) -> &'static str;
@@ -32,11 +31,14 @@ impl Foo {
     }
 }
 
-trait Visit<I, R> {
-    fn visit(&self, input : I) -> R;
+trait Visit<I> {
+    type Output;
+    fn visit(&self, input : I) -> Self::Output;
 }
 
-impl<I, R> Visit<I,R> for Foo where A : Visit<I,R>, B : Visit<I,R>{
+impl<I, R> Visit<I> for Foo where A : Visit<I, Output=R>, B : Visit<I, Output=R>{
+    type Output = R;
+
     fn visit(&self, input: I) -> R {
         return match self {
             Foo::A(val) => {Visit::visit(val, input)}
@@ -49,7 +51,8 @@ impl<I, R> Visit<I,R> for Foo where A : Visit<I,R>, B : Visit<I,R>{
 
 struct GetNameFwd {}
 
-impl<T> Visit<GetNameFwd, &'static str> for T where T : GetName {
+impl<T> Visit<GetNameFwd> for T where T : GetName {
+    type Output = &'static str;
     fn visit(&self, input: GetNameFwd) -> &'static str {
         self.name()
     }
@@ -57,7 +60,7 @@ impl<T> Visit<GetNameFwd, &'static str> for T where T : GetName {
 
 impl Foo {
     fn get_name(&self) -> &'static str {
-        <Self as Visit<GetNameFwd, &'static str>>::visit(self, GetNameFwd{})
+        <Self as Visit<GetNameFwd>>::visit(self, GetNameFwd{})
     }
 }
 

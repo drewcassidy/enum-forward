@@ -2,44 +2,59 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use proc_macro2::TokenStream;
+use std::collections::HashSet;
+use proc_macro2::{Ident, Span, TokenStream};
 use syn::punctuated::Punctuated;
-use syn::{Fields, FieldsUnnamed, ItemEnum, parse2, TraitBound};
+use syn::{Fields, FieldsUnnamed, GenericParam, Generics, ItemEnum, parse2, TraitBound, Type, TypeParam, WhereClause};
 use syn::token::Plus;
-use quote::{quote_spanned, ToTokens};
+use quote::{quote, quote_spanned, TokenStreamExt, ToTokens};
 use syn::parse::Parser;
 use syn::spanned::Spanned;
+use crate::common::{variant_patterns, VariantInfo};
+use crate::error::Result;
+use itertools::Itertools;
 
-pub fn forwarding2(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
-    type TraitBounds = Punctuated<TraitBound, Plus>;
-
+pub fn forwarding2(item: TokenStream) -> Result<TokenStream> {
     let mut output = TokenStream::new();
 
-    let traits = TraitBounds::parse_terminated.parse2(attr)?;
-    let mut item = parse2::<ItemEnum>(item)?;
+    let item = parse2::<ItemEnum>(item)?;
+    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
     let item_ident = item.ident.clone();
 
-    for variant in &mut item.variants {
-        match variant.fields.clone() {
-            Fields::Named(ns) => {
-                if ns.named.len() > 1 {
-                    return Err(syn::Error::new(variant.span(), "Only one field allowed on each variant"));
+    let mut impl_generics = syn::parse2::<Generics>(impl_generics.to_token_stream())?;
+
+    let input_ty = Ident::new("I", Span::call_site());
+    let output_ty = Ident::new("R", Span::call_site());
+
+    impl_generics.params.push(GenericParam::Type(TypeParam::from(input_ty.clone())));
+    impl_generics.params.push(GenericParam::Type(TypeParam::from(output_ty.clone())));
+
+    let types = variant_patterns(&item).map(|v| Ok((v?.inner_ty).clone())).collect::<Result<Vec<_>>>()?;
+    let additional_wheres = types.iter().unique().map(|ty| {
+        Ok(quote!(#ty : enum_forward::Forward<#input_ty, Output=#output_ty>))
+    }).collect::<Result<Vec<_>>>()?;
+    let where_clause = match where_clause {
+        None => { quote!(where #(#additional_wheres),*) }
+        Some(w) => { quote!(#w, #(#additional_wheres),*) }
+    };
+
+    let arms = variant_patterns(&item).map(|v| {
+        let VariantInfo { pattern, .. } = v?;
+        Ok(quote!(#pattern => {enum_forward::Forward::forward(value, input)}))
+    }).collect::<Result<Vec<_>>>()?;
+
+    output.extend(quote! {
+        impl<#input_ty,#output_ty> enum_forward::Forward<#input_ty> for #item_ident #where_clause {
+            type Output = #output_ty;
+
+            fn forward(&self, input : &#input_ty) -> #output_ty {
+                return match self {
+                    #(#arms),*
                 }
-            }
-            Fields::Unnamed(us) => {
-                if us.unnamed.len() > 1 {
-                    return Err(syn::Error::new(variant.span(), "Only one field allowed on each variant"));
-                }
-            }
-            Fields::Unit => {
-                let var_ident = variant.ident.clone();
-                variant.fields = Fields::Unnamed(
-                    parse2::<FieldsUnnamed>(quote_spanned! {var_ident.span() => (#var_ident)})?)
             }
         }
-    }
-
-    item.clone().to_tokens(&mut output);
+    });
 
     Ok(output)
 }
+
