@@ -2,17 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::collections::HashSet;
+use itertools::Itertools;
 use proc_macro2::{Ident, Span, TokenStream};
-use syn::punctuated::Punctuated;
-use syn::{Fields, FieldsUnnamed, GenericParam, Generics, ItemEnum, parse2, TraitBound, Type, TypeParam, WhereClause};
-use syn::token::Plus;
-use quote::{quote, quote_spanned, TokenStreamExt, ToTokens};
-use syn::parse::Parser;
-use syn::spanned::Spanned;
+use quote::{quote, ToTokens};
+use syn::{GenericParam, Generics, ItemEnum, parse2, TypeParam};
+
 use crate::common::{variant_patterns, VariantInfo};
 use crate::error::Result;
-use itertools::Itertools;
 
 pub fn forwarding2(item: TokenStream) -> Result<TokenStream> {
     let mut output = TokenStream::new();
@@ -21,7 +17,7 @@ pub fn forwarding2(item: TokenStream) -> Result<TokenStream> {
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
     let item_ident = item.ident.clone();
 
-    let mut impl_generics = syn::parse2::<Generics>(impl_generics.to_token_stream())?;
+    let mut impl_generics = parse2::<Generics>(impl_generics.to_token_stream())?;
 
     let input_ty = Ident::new("I", Span::call_site());
     let output_ty = Ident::new("R", Span::call_site());
@@ -44,7 +40,7 @@ pub fn forwarding2(item: TokenStream) -> Result<TokenStream> {
     }).collect::<Result<Vec<_>>>()?;
 
     output.extend(quote! {
-        impl<#input_ty,#output_ty> enum_forward::Forward<#input_ty> for #item_ident #where_clause {
+        impl<#input_ty,#output_ty> enum_forward::Forward<#input_ty> for #item_ident #ty_generics #where_clause {
             type Output = #output_ty;
 
             fn forward(&self, input : &#input_ty) -> #output_ty {
