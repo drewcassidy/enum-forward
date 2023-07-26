@@ -1,5 +1,6 @@
 use std::process::Output;
 use enum_forward::{Forward, From, TryInto};
+use enum_forward_macros::forward_to;
 
 struct A {}
 struct B {}
@@ -65,3 +66,28 @@ impl Foo {
     }
 }
 
+trait Bar {
+    fn bar<'a>(self, name : &'a str);
+}
+
+impl Bar for Foo {
+    // #[forward_to(Foo as GetName)]
+    // fn bar<'a>(self, name : &'a str);
+        fn bar<'a>(self, name: &'a str) {
+        struct barVisitor<'a, '_blanket> {
+            name: &'a str,
+            _phantom: std::marker::PhantomData<&'_blanket i32>,
+        }
+        impl<'a, '_blanket, B> enum_forward::Forward<barVisitor<'a, '_blanket>> for B
+        where
+            B: GetName,
+        {
+            type Output = ();
+
+            fn forward(&self, input: &barVisitor<'a, '_blanket>) -> Self::Output {
+                todo!()
+            }
+        }
+    }
+
+}

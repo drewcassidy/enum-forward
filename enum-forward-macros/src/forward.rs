@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use itertools::Itertools;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote, ToTokens};
-use syn::{Attribute, FnArg, GenericParam, Generics, ItemEnum, Lifetime, LifetimeParam, parse2, Pat, PatIdent, Signature, Token, TraitBound, Type, TypeParam, TypePath, Visibility};
+use syn::{Attribute, FnArg, GenericParam, Generics, ItemEnum, Lifetime, LifetimeParam, parse2, Pat, PatIdent, Signature, Token, TraitBound, Type, TypeParam, TypeParamBound, TypePath, Visibility, WherePredicate, PredicateType, WhereClause, ReturnType, TypeTuple};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -76,6 +76,7 @@ impl Parse for InputFn {
         let body = if input.peek(Brace) {
             Some(input.parse::<TokenStream>()?)
         } else {
+            input.parse::<Token!(;)>()?;
             None
         };
 
@@ -111,10 +112,18 @@ impl Parse for InputAttr {
 pub fn forward_to(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     let attr: InputAttr = parse2(attr)?;
     let item: InputFn = parse2(item)?;
+    let item_attrs = item.attrs;
+    let item_vis = item.vis;
+    let item_sig = item.sig;
 
-    let ident = item.sig.ident;
+    let result_ty = match item_sig.output.clone() {
+        ReturnType::Default => { Type::Tuple(TypeTuple { paren_token: Default::default(), elems: Default::default() }) }
+        ReturnType::Type(_, bt) => { *bt.clone() }
+    };
 
-    let mut output = TokenStream::new();
+    let ident = item_sig.clone().ident;
+
+    let mut inner = TokenStream::new();
 
     let mut receiver: Option<(Type, Pat)> = None;
     let mut args: Vec<(Type, Pat)> = vec![];
@@ -129,7 +138,7 @@ pub fn forward_to(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         subpat: None,
     };
 
-    for input in item.sig.inputs.iter().rev() {
+    for input in item_sig.clone().inputs.iter().rev() {
         match input {
             FnArg::Typed(typed) => {
                 let pat = *typed.pat.clone();
@@ -159,15 +168,15 @@ pub fn forward_to(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         }
     }
 
-    let blanket_lt = Lifetime::new("_blanket", Span::call_site());
+    let blanket_lt = Lifetime::new("'_blanket", Span::call_site());
     let mut lifetimes = HashSet::<Lifetime>::from([blanket_lt.clone()]);
 
     for (ref mut ty, _) in &mut args {
         (*ty) = lifetimeify(ty.clone(), &blanket_lt, &mut lifetimes);
     }
 
-    let mut struct_generics = item.sig.generics;
-    struct_generics.params.extend(lifetimes.iter().map(|lt| GenericParam::Lifetime(LifetimeParam{
+    let mut struct_generics = item_sig.clone().generics;
+    struct_generics.params.extend([blanket_lt.clone()].iter().map(|lt| GenericParam::Lifetime(LifetimeParam {
         attrs: vec![],
         lifetime: lt.clone(),
         colon_token: None,
@@ -180,16 +189,68 @@ pub fn forward_to(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         quote!(#pat : #ty)
     }).collect_vec();
 
-    output.extend(
-        quote!{
+    inner.extend(
+        quote! {
             struct #struct_ident #ty_generics #where_clause {
-                #(#struct_items),*
+                #(#struct_items),*,
+                _phantom : std::marker::PhantomData<&#blanket_lt i32>
             }
+
         }
     );
 
+    inner.extend(impl_forward_variants(struct_generics.clone(), Type::Verbatim(struct_ident.clone().into_token_stream()), result_ty.clone(), attr.traits.clone()));
 
-    // let body = item.body.unwrap_or()
+
+    if item.body.is_some() {
+        unimplemented!()
+    }
+
+    let output = quote! {
+        #(#item_attrs)*
+        #item_vis #item_sig {
+            #inner
+        }
+    };
+
 
     Ok(output)
+}
+
+fn impl_forward_variants(mut generics: Generics, input_ty: Type, result_ty: Type, traits_bounds: Punctuated<TraitBound, Token!(+)>)
+                         -> Result<TokenStream> {
+
+    let input_generics = generics.clone();
+    let (_, input_ty_generics, _) = input_generics.split_for_impl();
+
+
+    let blanket_ty = Ident::new("B", Span::call_site());
+    generics.params.extend([GenericParam::Type(TypeParam { attrs: vec![], ident: blanket_ty.clone(), colon_token: None, bounds: Default::default(), eq_token: None, default: None })].into_iter());
+    let mut where_clause = generics.where_clause.unwrap_or(WhereClause {
+        where_token: Default::default(),
+        predicates: Default::default(),
+    });
+    where_clause.predicates.extend(
+        [WherePredicate::Type(
+            PredicateType {
+                lifetimes: None,
+                bounded_ty: Type::Verbatim(blanket_ty.to_token_stream()),
+                colon_token: Default::default(),
+                bounds: traits_bounds.iter().map(
+                    |tb| { TypeParamBound::Trait(tb.clone()) }
+                ).collect(),
+            }
+        )].into_iter()
+    );
+    generics.where_clause = Some(where_clause);
+
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+
+
+    return Ok(quote! {
+        impl #impl_generics enum_forward::Forward<#input_ty::<'a, '_blanket>> for #blanket_ty #where_clause {
+
+        }
+    });
 }
