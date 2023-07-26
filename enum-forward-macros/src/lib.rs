@@ -33,3 +33,11 @@ pub fn forwarding(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         Err(err) => err.to_compile_error().into(),
     }
 }
+
+#[proc_macro_attribute]
+pub fn forward_to(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match forward::forward_to(attr.into(), item.into()) {
+        Ok(output) => output.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}

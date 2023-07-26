@@ -1,3 +1,4 @@
+use std::process::Output;
 use enum_forward::{Forward, From, TryInto};
 
 struct A {}
@@ -60,7 +61,7 @@ impl<T> Visit<GetNameFwd> for T where T : GetName {
 
 impl Foo {
     fn get_name(&self) -> &'static str {
-        <Self as Visit<GetNameFwd>>::visit(self, GetNameFwd{})
+        Self::visit(self, GetNameFwd{})
     }
 }
 

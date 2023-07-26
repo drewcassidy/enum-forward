@@ -9,6 +9,7 @@ pub enum Error {
     MultipleMembers(Span),
     UnitVariant(Span),
     DuplicateType(Span),
+    MismatchedArgType(Span),
     Other(Span, String),
     Syn(syn::Error),
 }
@@ -26,6 +27,9 @@ impl Into<syn::Error> for Error {
             }
             Error::DuplicateType(span) => {
                 syn::Error::new(span, "Enum has multiple variants with the same type.")
+            }
+            Error::MismatchedArgType(span) => {
+                syn::Error::new(span, "Mismatch between argument name and type")
             }
             Error::Other(span, msg) => {
                 syn::Error::new(span, msg)

@@ -67,7 +67,7 @@ pub(crate) fn replace_ident(ts: TokenStream, from: Ident, to: Ident) -> TokenStr
     ).collect()
 }
 
-fn lifetimeify(ty: Type, blanket: &Lifetime, lifetimes: &mut HashSet<Lifetime>) -> Type {
+pub(crate) fn lifetimeify(ty: Type, blanket: &Lifetime, lifetimes: &mut HashSet<Lifetime>) -> Type {
     match ty {
         Type::Array(inner) => {
             Type::Array(TypeArray {
